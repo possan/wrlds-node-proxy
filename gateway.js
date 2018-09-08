@@ -1,20 +1,12 @@
 var noble = require('noble');
 var osc = require('node-osc');
 
-var service_id = '1811';
-var characteristic_id = '2a56';
+var SERVICE_ID = '1811';
+var CHARACTERISTICS_ID = '2a56';
 
 var peripheralIdOrAddress = process.argv[2] && process.argv[2].toLowerCase();
 var oscPort = process.argv[3] && ~~process.argv[3];
 var oscClient = null;
-
-noble.on('stateChange', function(state) {
-  if (state === 'poweredOn') {
-    noble.startScanning();
-  } else {
-    noble.stopScanning();
-  }
-});
 
 var re = new RegExp(/hello wrlds/ig);
 
@@ -22,8 +14,18 @@ if (oscPort) {
     oscClient = new osc.Client('127.0.0.1', oscPort);
 }
 
+noble.on('stateChange', function(state) {
+    if (state === 'poweredOn') {
+        console.log('Scanning for BLE devices...');
+        noble.startScanning([SERVICE_ID], false);
+    }
+    else {
+        noble.stopScanning();
+    }
+})
+
 function explore(peripheral) {
-    console.log('services and characteristics:');
+    console.log('Connecting to device...');
 
     peripheral.on('disconnect', function() {
         process.exit(0);
@@ -33,30 +35,30 @@ function explore(peripheral) {
         peripheral.discoverServices([], function(error, services) {
 
             services.forEach(service => {
-                console.log('service', service.uuid);
+                console.log('Service', service.uuid);
 
-                if (service.uuid != service_id) {
+                if (service.uuid != SERVICE_ID) {
                     return;
                 }
 
-                console.log('found service.');
+                console.log('Found correct service.');
 
                 service.discoverCharacteristics([], function(error, characteristics) {
                     characteristics.forEach(c => {
-                        console.log('characteristic ' + c.uuid);
+                        console.log('Characteristic ' + c.uuid);
 
-                        if (c.uuid != characteristic_id) {
+                        if (c.uuid != CHARACTERISTICS_ID) {
                             return;
                         }
 
-                        console.log('found characteristic');
+                        console.log('Found correct characteristic.');
 
                         c.subscribe(function(error) {
-                            console.log('subscribed.');
+                            console.log('Subscribed.');
                         });
 
                         c.on('read', function(data, isNotification) {
-                            console.log('Got data', data);
+                            console.log('Got bytes', data);
                             var acc = 0.0;
                             var buffer = new Buffer(data);
                             for(var i=0; i<10; i++) {
@@ -80,70 +82,16 @@ function explore(peripheral) {
     });
 }
 
-if (peripheralIdOrAddress) {
-    noble.on('discover', function(peripheral) {
+noble.on('discover', function(peripheral) {
+    if (peripheralIdOrAddress) {
         if (peripheral.id === peripheralIdOrAddress || peripheral.address === peripheralIdOrAddress) {
             noble.stopScanning();
-
-            console.log('peripheral with ID ' + peripheral.id + ' found');
-            var advertisement = peripheral.advertisement;
-
-            var localName = advertisement.localName;
-            var txPowerLevel = advertisement.txPowerLevel;
-            var manufacturerData = advertisement.manufacturerData;
-            var serviceData = advertisement.serviceData;
-            var serviceUuids = advertisement.serviceUuids;
-
-            if (localName) {
-                console.log('  Local Name        = ' + localName);
-            }
-
-            if (txPowerLevel) {
-                console.log('  TX Power Level    = ' + txPowerLevel);
-            }
-
-            if (manufacturerData) {
-                console.log('  Manufacturer Data = ' + manufacturerData.toString('hex'));
-            }
-
-            if (serviceData) {
-                console.log('  Service Data      = ' + JSON.stringify(serviceData, null, 2));
-            }
-
-            if (serviceUuids) {
-                console.log('  Service UUIDs     = ' + serviceUuids);
-            }
-
-            console.log();
             explore(peripheral);
         }
-    });
-} else {
-    noble.on('discover', function(peripheral) {
+    }else{
         console.log('discovered #' + peripheral.id + ': ' + peripheral.advertisement.localName);
-        //   console.log('\tcan I interest you in any of the following advertised services:');
-        //   console.log('\t\t' + JSON.stringify(peripheral.advertisement.serviceUuids));
-        if (re.test(peripheral.advertisement.localName)) {
-            console.log('found device.')
-            if (peripheral.connectable) {
-                console.log('found connectable device.', peripheral.id)
-            }
+        if (re.test(peripheral.advertisement.localName) && peripheral.connectable) {
+            console.log('found connectable device.', peripheral.id)
         }
-        //   var serviceData = peripheral.advertisement.serviceData;
-        //   if (serviceData && serviceData.length) {
-        //     console.log('\there is my service data:');
-        //     for (var i in serviceData) {
-        //       console.log('\t\t' + JSON.stringify(serviceData[i].uuid) + ': ' + JSON.stringify(serviceData[i].data.toString('hex')));
-        //     }
-        //   }
-        //   if (peripheral.advertisement.manufacturerData) {
-        //     console.log('\there is my manufacturer data:');
-        //     console.log('\t\t' + JSON.stringify(peripheral.advertisement.manufacturerData.toString('hex')));
-        //   }
-        //   if (peripheral.advertisement.txPowerLevel !== undefined) {
-        //     console.log('\tmy TX power level is:');
-        //     console.log('\t\t' + peripheral.advertisement.txPowerLevel);
-        //   }
-        //   console.log();
-    });
-}
+    }
+});
