@@ -1,10 +1,12 @@
 var noble = require('noble');
-var async = require('async');
+var osc = require('node-osc');
 
 var service_id = '1811';
 var characteristic_id = '2a56';
 
 var peripheralIdOrAddress = process.argv[2] && process.argv[2].toLowerCase();
+var oscPort = process.argv[3] && ~~process.argv[3];
+var oscClient = null;
 
 noble.on('stateChange', function(state) {
   if (state === 'poweredOn') {
@@ -16,6 +18,9 @@ noble.on('stateChange', function(state) {
 
 var re = new RegExp(/hello wrlds/ig);
 
+if (oscPort) {
+    oscClient = new osc.Client('127.0.0.1', oscPort);
+}
 
 function explore(peripheral) {
     console.log('services and characteristics:');
@@ -62,6 +67,11 @@ function explore(peripheral) {
                             acc *= 100;
                             acc /= 32768;
                             console.log('Bounce! ' + acc + '%');
+
+                            if (oscClient) {
+                                console.log('Sending OSC...');
+                                oscClient.send('/wrlds/' + peripheral.id + '/bounce', acc, function () {});
+                            }
                         });
                     });
                 });
@@ -69,7 +79,6 @@ function explore(peripheral) {
         });
     });
 }
-
 
 if (peripheralIdOrAddress) {
     noble.on('discover', function(peripheral) {

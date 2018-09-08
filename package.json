@@ -11,6 +11,6 @@
   "dependencies": {
     "async": "^2.6.1",
     "noble": "^1.9.1",
-    "osc": "^2.2.4"
+    "node-osc": "^2.1.0"
   }
 }
