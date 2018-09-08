@@ -3,12 +3,13 @@ var osc = require('node-osc');
 
 var SERVICE_ID = '1811';
 var CHARACTERISTICS_ID = '2a56';
+var CHARACTERISTICS2_ID = '2a57';
 
 var peripheralIdOrAddress = process.argv[2] && process.argv[2].toLowerCase();
 var oscPort = process.argv[3] && ~~process.argv[3];
 var oscClient = null;
 
-var re = new RegExp(/hello wrlds/ig);
+var re = new RegExp(/wrlds/ig);
 
 if (oscPort) {
     oscClient = new osc.Client('127.0.0.1', oscPort);
@@ -17,7 +18,7 @@ if (oscPort) {
 noble.on('stateChange', function(state) {
     if (state === 'poweredOn') {
         console.log('Scanning for BLE devices...');
-        noble.startScanning([SERVICE_ID], false);
+        noble.startScanning([], false);
     }
     else {
         noble.stopScanning();
@@ -33,50 +34,65 @@ function explore(peripheral) {
 
     peripheral.connect(function(error) {
         peripheral.discoverServices([], function(error, services) {
-
             services.forEach(service => {
                 console.log('Service', service.uuid);
+                if (service.uuid == SERVICE_ID) {
+                    console.log('Found correct service.');
 
-                if (service.uuid != SERVICE_ID) {
-                    return;
-                }
+                    service.discoverCharacteristics([], function(error, characteristics) {
+                        characteristics.forEach(c => {
+                            console.log('Characteristic ' + c.uuid);
 
-                console.log('Found correct service.');
+                            if (c.uuid == CHARACTERISTICS_ID) {
+                                console.log('Found correct characteristic.');
 
-                service.discoverCharacteristics([], function(error, characteristics) {
-                    characteristics.forEach(c => {
-                        console.log('Characteristic ' + c.uuid);
+                                c.subscribe(function(error) {
+                                    console.log('Subscribed.');
+                                });
 
-                        if (c.uuid != CHARACTERISTICS_ID) {
-                            return;
-                        }
+                                c.on('read', function(data, isNotification) {
+                                    console.log('Got bytes', data);
+                                    var acc = 0.0;
+                                    var buffer = new Buffer(data);
+                                    for(var i=0; i<10; i++) {
+                                        var x = buffer.readInt16LE(i * 2)
+                                        acc += Math.abs(x);
+                                    }
+                                    acc /= 10;
+                                    acc *= 100;
+                                    acc /= 32768;
+                                    console.log('Bounce! ' + acc + '%');
 
-                        console.log('Found correct characteristic.');
-
-                        c.subscribe(function(error) {
-                            console.log('Subscribed.');
-                        });
-
-                        c.on('read', function(data, isNotification) {
-                            console.log('Got bytes', data);
-                            var acc = 0.0;
-                            var buffer = new Buffer(data);
-                            for(var i=0; i<10; i++) {
-                                var x = buffer.readInt16LE(i * 2)
-                                acc += Math.abs(x);
+                                    if (oscClient) {
+                                        console.log('Sending OSC...');
+                                        oscClient.send('/wrlds/' + peripheral.id + '/bounce', acc, function () {});
+                                    }
+                                });
                             }
-                            acc /= 10;
-                            acc *= 100;
-                            acc /= 32768;
-                            console.log('Bounce! ' + acc + '%');
 
-                            if (oscClient) {
-                                console.log('Sending OSC...');
-                                oscClient.send('/wrlds/' + peripheral.id + '/bounce', acc, function () {});
+                            if (c.uuid == CHARACTERISTICS2_ID) {
+                                console.log('Found correct characteristic.');
+
+                                c.subscribe(function(error) {
+                                    console.log('Subscribed.');
+                                });
+
+                                c.on('read', function(data, isNotification) {
+                                    console.log('Got bytes', data);
+                                    var buffer = new Buffer(data);
+                                    var x = buffer.readInt16LE(0)
+                                    var y = buffer.readInt16LE(2)
+                                    var z = buffer.readInt16LE(4)
+                                    console.log('buffer',x,y,z);
+                                    if (oscClient) {
+                                        console.log('Sending OSC...');
+                                        oscClient.send('/wrlds/' + peripheral.id + '/rotate', [x, y, z], function () {});
+                                    }
+                                });
                             }
                         });
                     });
-                });
+                }
             });
         });
     });
